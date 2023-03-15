@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Kiểm tra xem người dùng có quyền root hay không
+if [ "$EUID" -ne 0 ]
+  then echo "Bạn phải chạy script này với quyền root"
+  exit
+fi
+
+# Dọn cache DNS
+systemd-resolve --flush-caches
+
+# Xóa tập tin cache DNS
+rm -f /run/systemd/resolve/stub-resolv.conf
+rm -f /etc/resolv.conf
+ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+echo "Đã xóa cache DNS thành công"
