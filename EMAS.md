@@ -1,28 +1,25 @@
-# THIẾT LẬP BAN ĐẦU
+# Tài liệu hướng dẫn triển khai: EMAS - VNPT
+![Model](/Picture/Mo%20hinh%20trien%20khai.png)
 
--   Các node:
+## 1. Thiết lập ban đầu
+-  Các node:
 
- \+ Node 1 -- gpu1: 192.168.5.61
+    Node 1 - gpu1: 192.168.5.61
+    
+    Node 2 - gpu2: 192.168.5.62
 
- \+ Node 2 -- gpu2: 192.168.5.62
+    Node 3 - GUI: 192.168.5.63
 
- \+ Node 3 -- GUI: 192.168.5.63
+    Node 4 - cpu1: 192.168.5.64
 
- \+ Node 4 -- cpu1: 192.168.5.64
+    Node 5 - cpu2: 192.168.5.65
 
- \+ Node 5 -- cpu2: 192.168.5.65
-
--   Kích hoạt account root và cập nhật múi giờ:
-
- *sudo passwd*
-
- *sudo timedatectl set-timezone Asia/Ho_Chi_Minh*
-
--   Yêu cầu đặc quyền root:
-
- *sudo su*
-
-## Cài đặt IP tĩnh
+- Kích hoạt account root và cập nhật múi giờ:
+    ```console
+    sudo passwd*
+    sudo timedatectl set-timezone Asia/Ho_Chi_Minh*
+    ```
+### 1.1 Cài đặt IP tĩnh
 
 -   Bước 1: Mở và chỉnh sửa cấu hình IP tương tự trên các node
 
