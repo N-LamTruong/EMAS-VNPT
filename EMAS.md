@@ -21,125 +21,123 @@
     ```
 ### 1.1 Cài đặt IP tĩnh
 
--   Bước 1: Mở và chỉnh sửa cấu hình IP tương tự trên các node
+- Bước 1: Mở và chỉnh sửa cấu hình IP tương tự trên các node
 
- *nano /etc/netplan/00-installer-config.yaml*
-
-
+    ```console
+    nano /etc/netplan/00-installer-config.yaml
+    ```
+    ![configIP](/Picture/config%20IP.png)
 -   Bước 2: Apply cấu hình IP mới
+    ```console
+    netplan apply
+    ```
+### 1.2 Cài đặt JDK 11 và Development Tools
 
- *netplan apply*
+- Bước 1: Update và upgrade server trước khi cài đặt JDK
+    ```console
+    apt update && apt upgrade -y
+    ```
+- Bước 2: Cài đặt openJDK 11
+    ```console
+    apt install openjdk-11-jdk -y
+    ```
+- Bước 3: Cài đặt Development
+    ```console
+    apt install build-essential -y
+    ```
+## 2. HƯỚNG DẪN CÀI ĐẶT DỊCH VỤ 3RD PARTY
 
-## Cài đặt JDK 11
+### 2.1 Cài đặt Nginx
 
--   Bước 1: Update và upgrade server trước khi cài đặt JDK
-
- *apt update*
-
--   Bước 2: Cài đặt openJDK 11
-
- *apt install openjdk-11-jdk -y*
-
-## Cài đặt Development Tools
-
--   Bước 1: Cài đặt Development
-
- *apt install build-essential -y*
-
-# HƯỚNG DẪN CÀI ĐẶT DỊCH VỤ THƯỜNG DÙNG
-
-## Cài đặt Nginx
-
--   Bước 1: Cài đặt web server Nginx
-
- *apt install nginx -y*
-
--   Bước 2: Enable mỗi khi khởi động và start service
-
- *systemctl start nginx && systemctl enable nginx*
-
+- Bước 1: Cài đặt web server Nginx
+    ```console
+    apt install nginx -y
+    ```
+- Bước 2: Enable mỗi khi khởi động và start service
+    ```console
+    systemctl start nginx && systemctl enable nginx
+    ```
 ## Cài đặt Keepalived
 
--   Bước 1: Cài đặt service Keepalived
+- Bước 1: Cài đặt service Keepalived
+    ```console
+    apt-get -y install keepalived
+    ```
+- Bước 2: Cấu hình cho phép gắn địa chỉ IP ảo lên card mạng và IP Forward
+    ```console
+    echo \"net.ipv4.ip_nonlocal_bind = 1\" \>\> /etc/sysctl.conf
+    echo \"net.ipv4.ip_forward = 1\" \>\> /etc/sysctl.conf
+    sysctl -p
+    ```
+- Bước 3: Cấu hình Keepalived
 
- *apt-get -y install keepalived*
+    **Node 1**
 
--   Bước 2: Cấu hình cho phép gắn địa chỉ IP ảo lên card mạng và IP
-    Forward
+    ```console
+    nano /etc/keepalived/keepalived.conf
+    ```
+    ```console
+   # Define the script used to check if haproxy is still working
 
- *echo \"net.ipv4.ip_nonlocal_bind = 1\" \>\> /etc/sysctl.conf*
+   vrrp_script chk_nginx {
 
- *echo \"net.ipv4.ip_forward = 1\" \>\> /etc/sysctl.conf*
+   script \"/usr/bin/killall -0 nginx\"
 
- *sysctl -p*
+   interval 2
 
--   Bước 3: Cấu hình Keepalived
+   weight 2
 
- \+ **Node 1**
+   }
 
- *nano /etc/keepalived/keepalived.conf*
+   # Configuration for Virtual Interface
 
- \# Define the script used to check if haproxy is still working
+   vrrp_instance LB_VIP {
 
- vrrp_script chk_nginx {
+   interface enp0s3
 
- script \"/usr/bin/killall -0 nginx\"
+   state MASTER \# set to BACKUP on the peer machine
 
- interval 2
+   priority 101 \# set to 99 on the peer machine
 
- weight 2
+   virtual_router_id 51
 
- }
+   authentication {
 
- \# Configuration for Virtual Interface
+   auth_type AH
 
- vrrp_instance LB_VIP {
+   auth_pass abCD@1234 \# Password for accessing vrrpd. Same on all
+   devices
 
- interface enp0s3
+   }
 
- state MASTER \# set to BACKUP on the peer machine
+   unicast_src_ip 192.168.5.61 \# Private IP address of master
 
- priority 101 \# set to 99 on the peer machine
+   unicast_peer {
 
- virtual_router_id 51
+   192.168.5.62 \# Private IP address of the backup haproxy
 
- authentication {
+   }
 
- auth_type AH
+   advert_int 1
 
- auth_pass abCD@1234 \# Password for accessing vrrpd. Same on all
- devices
+   # The virtual ip address shared between the two loadbalancers
 
- }
+   virtual_ipaddress {
 
- unicast_src_ip 192.168.5.61 \# Private IP address of master
+   192.168.5.60 dev enp0s3
 
- unicast_peer {
+   }
 
- 192.168.5.62 \# Private IP address of the backup haproxy
+   # Use the Defined Script to Check whether to initiate a fail over
 
- }
+   track_script {
 
- advert_int 1
+   chk_nginx
 
- \# The virtual ip address shared between the two loadbalancers
+   }
 
- virtual_ipaddress {
-
- 192.168.5.60 dev enp0s3
-
- }
-
- \# Use the Defined Script to Check whether to initiate a fail over
-
- track_script {
-
- chk_nginx
-
- }
-
- }
-
+   }
+    ```
  \+ **Node 2**
 
  nano /etc/keepalived/keepalived.conf
