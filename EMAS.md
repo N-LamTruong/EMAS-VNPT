@@ -452,113 +452,81 @@ Percona XtraDB Cluster là một giải pháp mã nguồn mở hoàn toàn và c
   systemctl enable td-agent && systemctl restart td-agent
   ```
 ### 2.5 Cài đặt Redis
+![Redis](/Picture/redis-cache.png)
 
-### Redis-server
+**Redis-server**
 
--   Bước 1: Cài đặt từ kho lưu trữ
+- Bước 1: Cài đặt từ kho lưu trữ
+  ```console
+  curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+  echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+  apt-get update && apt-get install redis -y
+  systemctl enable redis-server
+  ```
+- Bước 2: Cấu hình Redis-server **master** (Node 1)
+  ```console
+  nano /etc/redis/redis.conf
+  bind 0.0.0.0
+  masterauth 123  # Password tùy chọn
+  requirepass 123 # Nhập lại password
+  service redis-server restart
+  ```
+- Bước 3: Cấu hình Redis-server **slave** (Node 2, 3)
+  ```console
+  nano /etc/redis/redis.conf
+  bind 0.0.0.0
+  replicaof 192.168.5.61 6379 #IP node master
+  masterauth 123
+  requirepass 123
+  service redis-server restart
+  ```
+    ![redis-status](/Picture/redis%20status.png)
 
- *curl -fsSL https://packages.redis.io/gpg \| sudo gpg \--dearmor -o
- /usr/share/keyrings/redis-archive-keyring.gpg*
+**Redis-sentinel**
 
- *echo \"deb
- \[signed-by=/usr/share/keyrings/redis-archive-keyring.gpg\]
- https://packages.redis.io/deb \$(lsb_release -cs) main\" \| sudo tee
- /etc/apt/sources.list.d/redis.list*
+- Bước 1: Cấu hình Redis-sentinel
+  ```console
+  nano /etc/redis/sentinel.conf
+  ```
+  ```console
+  daemonize yes
+  port 26379
+  bind 0.0.0.0
+  supervised systemd
+  pidfile "/run/redis/redis-sentinel.pid"
+  logfile "/var/log/redis/sentinel.log"
+  sentinel monitor redis-cluster 192.168.5.61 6379 2
+  sentinel auth-pass redis-cluster 123
+  sentinel down-after-milliseconds redis-cluster 3000
+  sentinel failover-timeout redis-cluster 10000
+  sentinel parallel-syncs redis-cluster 1
+  ```
+- Bước 2: Phân quyền và tạo file systemd cho service
+  ```console
+  chown redis:redis /etc/redis/sentinel.conf
+  nano /etc/systemd/system/redis-sentinel.service
+  ```
+  ```console
+  [Unit]
+  Description=Redis Sentinel
+  After=network.target
 
- *apt-get update && apt-get install redis -y*
+  [Service]
+  User=redis
+  Group=redis
+  Type=notify
+  ExecStart=/usr/bin/redis-server /etc/redis/sentinel.conf --sentinel
+  ExecStop=/usr/bin/redis-cli shutdown
+  Restart=always
 
- *systemctl enable redis-server*
-
--   Bước 2: Cấu hình Redis-server **master** (Node 1)
-
- *nano /etc/redis/redis.conf*
-
- bind 0.0.0.0
-
- masterauth 123 \# Password tùy chọn
-
- requirepass 123 \# Nhập lại password
-
- *service redis-server restart*
-
--   Bước 3: Cấu hình Redis-server **slave** (Node 2, 3)
-
- *nano /etc/redis/redis.conf*
-
- bind 0.0.0.0
-
- replicaof 192.168.5.61 6379 #IP node master
-
- masterauth 123
-
- requirepass 123
-
- *service redis-server restart*
-
-
-### Redis-sentinel
-
--   Bước 1: Cấu hình Redis-sentinel
-
- *nano /etc/redis/sentinel.conf*
-
- daemonize yes
-
- port 26379
-
- bind 0.0.0.0
-
- supervised systemd
-
- pidfile \"/run/redis/redis-sentinel.pid\"
-
- logfile \"/var/log/redis/sentinel.log\"
-
- sentinel monitor redis-cluster 192.168.5.61 6379 2
-
- sentinel auth-pass redis-cluster 123
-
- sentinel down-after-milliseconds redis-cluster 3000
-
- sentinel failover-timeout redis-cluster 10000
-
- sentinel parallel-syncs redis-cluster 1
-
--   Bước 2: Phân quyền và tạo file systemd cho service
-
- *chown redis:redis /etc/redis/sentinel.conf\
- nano /etc/systemd/system/redis-sentinel.service*
-
- \[Unit\]
-
- Description=Redis Sentinel
-
- After=network.target
-
- \[Service\]
-
- User=redis
-
- Group=redis
-
- Type=notify
-
- ExecStart=/usr/bin/redis-server /etc/redis/sentinel.conf \--sentinel
-
- ExecStop=/usr/bin/redis-cli shutdown
-
- Restart=always
-
- \[Install\]
-
- WantedBy=multi-user.target
-
--   Bước 3: Load lại daemon và khởi động service
-
- *systemctl daemon-reload && systemctl enable redis-sentinel*
-
- *service redis-sentinel start*
-
+  [Install]
+  WantedBy=multi-user.target
+  ```
+- Bước 3: Load lại daemon và khởi động service
+  ```console
+  systemctl daemon-reload && systemctl enable redis-sentinel
+  service redis-sentinel start
+  ```
 
 ## Cài đặt RabbitMQ
 
