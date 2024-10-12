@@ -57,19 +57,16 @@
     ```console
     systemctl start nginx && systemctl enable nginx
     ```
-## Cài đặt Keepalived
+### 2.2 Cài đặt Keepalived
 
-- Bước 1: Cài đặt service Keepalived
+- Bước 1: Cài đặt service Keepalived và cấu hình cho phép gắn địa chỉ IP ảo lên card mạng và IP Forward
     ```console
-    apt-get -y install keepalived
-    ```
-- Bước 2: Cấu hình cho phép gắn địa chỉ IP ảo lên card mạng và IP Forward
-    ```console
+    apt-get -y install keepalivede
     echo \"net.ipv4.ip_nonlocal_bind = 1\" \>\> /etc/sysctl.conf
     echo \"net.ipv4.ip_forward = 1\" \>\> /etc/sysctl.conf
     sysctl -p
     ```
-- Bước 3: Cấu hình Keepalived
+- Bước 2: Cấu hình Keepalived
 
     **Node 1**
 
@@ -138,277 +135,211 @@
 
    }
     ```
- \+ **Node 2**
+    **Node 2**
+    ```console
+    nano /etc/keepalived/keepalived.conf
+    ```
+    ```console 
+    # Define the script used to check if haproxy is still working
+ 
+   vrrp_script chk_nginx {
 
- nano /etc/keepalived/keepalived.conf
+   script \"/usr/bin/killall -0 nginx\"
 
- \# Define the script used to check if haproxy is still working
+   interval 2
 
- vrrp_script chk_nginx {
+   weight 2
 
- script \"/usr/bin/killall -0 nginx\"
+   }
 
- interval 2
+   # Configuration for Virtual Interface
 
- weight 2
+   vrrp_instance LB_VIP {
 
- }
+   interface enp0s3
 
- \# Configuration for Virtual Interface
+   state BACKUP \# set to MASTER on the peer machine
 
- vrrp_instance LB_VIP {
+   priority 99 \# set to 101 on the peer machine
 
- interface enp0s3
+   virtual_router_id 51
 
- state BACKUP \# set to MASTER on the peer machine
+   authentication {
 
- priority 99 \# set to 101 on the peer machine
+   auth_type AH
 
- virtual_router_id 51
+   auth_pass abCD@1234 \# Password for accessing vrrpd. Same on all
+   devices
 
- authentication {
+   }
 
- auth_type AH
+   unicast_src_ip 192.168.5.62 \# Private IP address of backup
 
- auth_pass abCD@1234 \# Password for accessing vrrpd. Same on all
- devices
-
- }
-
- unicast_src_ip 192.168.5.62 \# Private IP address of backup
-
- unicast_peer {
-
- 192.168.5.61 \# Private IP address of the master haproxy
-
- }
-
- advert_int 1
-
- \# The virtual ip address shared between the two loadbalancers
-
- virtual_ipaddress {
-
- 192.168.5.60 dev enp0s3
-
- }
-
- \# Use the Defined Script to Check whether to initiate a fail over
-
- track_script {
-
- chk_nginx
-
- }
-
- }
-
--   Bước 3: Khởi động dịch vụ Keepalived lần lượt trên node 1 và 2
-
- *systemctl start keepalived && systemctl enable keepalived*
-
--   Bước 4: Check status service Keepalived
-
- *systemctl status keepalived.service*
-
-## Cài đặt Percona XtraDB Cluster
-
--   Bước 1: Cài đặt từ kho lưu trữ (Node 1, 2)
-
- *apt install -y wget gnupg2 lsb-release curl*
-
- *wget
- <https://repo.percona.com/apt/percona-release_latest.generic_all.deb*
-
- *dpkg -i percona-release_latest.generic_all.deb*
-
- *apt update*
-
- *percona-release setup pxc80*
-
- *apt install -y percona-xtradb-cluster*
-
- \+ Sau đó nhập password cho account root của Database
-
--   Bước 2: Cấu hình các node để nhân rộng thành cụm
-
- \+ Sau khi cài đặt Percona XtraDB Cluster trên mỗi node, ta phải cấu
- hình cụm. Trong dự án này, tôi sẽ trình bày cách cấu hình một cụm 2
- node và 1 DB Management (**Galera Arbitrator)** trên node 3
-
-  ----------------------- ----------------------- ------------------------
-  **Node**                **Host**                **IP**
-
-  Node 1                  cpu1                    192.168.5.61
-
-  Node 2                  cpu2                    192.168.5.62
-
-  Node 3                  GUI                     192.168.5.63
-  ----------------------- ----------------------- ------------------------
-
- \+ **Node 1**
-
- *service mysql stop*
-
- *nano /etc/mysql/my.cnf*
-
- \[mysqld\]
-
- binlog_expire_logs_seconds=604800 \# 7 ngày hết hạn logs
-
- wsrep_provider=/usr/lib/galera4/libgalera_smm.so
-
- wsrep_cluster_name=VNPT
-
- wsrep_cluster_address=gcomm://
-
- wsrep_node_name=VNPT-Cluster
-
- wsrep_node_address=192.168.5.61
-
- wsrep_sst_method=xtrabackup-v2
-
- pxc_strict_mode=ENFORCING \# import file vào DB thì để tham số
- DISABLED
-
- binlog_format=ROW
-
- default_storage_engine=InnoDB
-
- innodb_autoinc_lock_mode=2
-
- pxc-encrypt-cluster-traffic=OFF \# Tắt mã hóa SSL
-
- \+ **Node 2**
-
- *service mysql stop*
-
- *nano /etc/mysql/my.cnf*
-
- \[mysqld\]
-
- binlog_expire_logs_seconds=604800 \# 7 ngày hết hạn logs
-
- wsrep_provider=/usr/lib/galera4/libgalera_smm.so
-
- wsrep_cluster_name=VNPT
-
- wsrep_cluster_address=gcomm://192.168.5.61,192.168.5.62
-
- wsrep_node_name=VNPT-Cluster
-
- wsrep_node_address=192.168.5.62
-
- wsrep_sst_method=xtrabackup-v2
-
- pxc_strict_mode=ENFORCING \# import file vào DB thì để tham số
- DISABLED
-
- binlog_format=ROW
-
- default_storage_engine=InnoDB
-
- innodb_autoinc_lock_mode=2
-
- pxc-encrypt-cluster-traffic=OFF \# Tắt mã hóa SSL
-
--   Bước 3: Khởi động node đầu tiên (Node 1)
-
- *systemctl start <mysql@bootstrap.service>*
-
- \+ Tạo user để đồng bộ dữ liệu giữa các node
-
- *mysql -u root -p*
-
- show status like \'wsrep%\';
-
- CREATE USER \'emas\'@\'%\' IDENTIFIED BY \'abCD@1234\';
-
- GRANT ALL PRIVILEGES ON \*.\* To \'emas\'@\'%\';
-
- GRANT GRANT OPTION ON \*.\* To \'emas\'@\'%\';
-
- FLUSH PRIVILEGES;
-
- SELECT \* from information_schema.user_privileges where grantee like
- \"\'emas\'%\";
-
- \+ Sửa lại file config
-
- *nano /etc/mysql/my.cnf*
-
- wsrep_cluster_address=gcomm://**192.168.5.61,192.168.5.62**
-
--   Bước 4: Thêm node vào cụm (Node 2)
-
- *systemctl start mysql*
-
- *mysql -u root -p*
-
- show status like \"%wsrep%\";
-
- select user,host from mysql.user;
-
--   Bước 5: Thiết lập DB Management - **Galera Arbitrator** (Node 3)
-
- \+ Cài đặt Galera Arbitrator từ kho lưu trữ
-
- *apt install -y wget gnupg2 lsb-release curl*
-
- *wget
- <https://repo.percona.com/apt/percona-release_latest.generic_all.deb>*
-
- *dpkg -i percona-release_latest.generic_all.deb*
-
- *apt update*
-
- *percona-release setup pxc80*
-
- *apt install percona-xtradb-cluster-garbd*
-
- \+ Cấu hình Galera Arbitrator
-
- *nano /etc/default/garb*
-
- \# Copyright (C) 2012 Codership Oy
-
- \# This config file is to be sourced by garb service script.
-
- \# A comma-separated list of node addresses (address\[:port\]) in the
- cluster
-
- GALERA_NODES=\"192.168.5.61:4567, 192.168.5.62:4567,
- 192.168.5.63:4567\"
-
- \# Galera cluster name, should be the same as on the rest of the
- nodes.
-
- GALERA_GROUP=\"VNPT\"
-
- \# Optional Galera internal options string (e.g. SSL settings)
-
- \# see
- http://galeracluster.com/documentation-webpages/galeraparameters.html
-
- \# GALERA_OPTIONS=\"\"
-
- \# Log file for garbd. Optional, by default logs to syslog
-
- \# Deprecated for CentOS7, use journalctl to query the log for garbd
-
- LOG_FILE=\"/var/log/garb.log\"
-
- \+ Tạo đường dẫn log, phân quyền và khởi động Galera Arbitrator
-
- *touch /var/log/garb.log*
-
- *chmod a+rw /var/log/garb.log*
-
- *systemctl start garbd*
-
- *service garbd status*
-
-## Cài đặt EFK Stack (Elasticsearch -- Fluentd -- Kibana) 
+   unicast_peer {
+
+   192.168.5.61 \# Private IP address of the master haproxy
+
+   }
+
+   advert_int 1
+
+   # The virtual ip address shared between the two loadbalancers
+
+   virtual_ipaddress {
+
+   192.168.5.60 dev enp0s3
+
+   }
+
+   # Use the Defined Script to Check whether to initiate a fail over
+
+   track_script {
+
+   chk_nginx
+
+   }
+
+   }
+    ```
+- Bước 3: Khởi động dịch vụ Keepalived lần lượt trên node 1 và 2
+    ```console
+    systemctl start keepalived && systemctl enable keepalived
+    ```
+- Bước 4: Check status service Keepalived trên các node
+    ```console
+    systemctl status keepalived.service
+    ```
+
+### 2.3 Cài đặt Percona XtraDB Cluster
+
+Percona XtraDB Cluster là một giải pháp mã nguồn mở hoàn toàn và có tính khả dụng cao cho MySQL. Nó tích hợp Percona Server và Percona XtraBackup với thư viện Galera cho phép sao chép đa nguồn đồng bộ.
+
+![Percona](/Picture/Percona.png)
+
+- Bước 1: Cài đặt từ kho lưu trữ (Node 1, 2)
+    ```console
+    apt install -y wget gnupg2 lsb-release curl
+    wget https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+    dpkg -i percona-release_latest.generic_all.deb
+    apt update
+    percona-release setup pxc80
+    apt install -y percona-xtradb-cluster
+    ```
+    Sau đó nhập password cho account root của Database
+
+- Bước 2: Cấu hình các node để nhân rộng thành cụm
+
+    Sau khi cài đặt Percona XtraDB Cluster trên mỗi node, ta phải cấu hình cụm. Trong dự án này, tôi sẽ trình bày cách cấu hình một cụm 2 node và 1 DB Management (**Galera Arbitrator)** trên node 3
+
+  | Node    | Host |       IP     |
+  | ------  | ---- | -------------|
+  | Node 1  | cpu1 | 192.168.5.61 |
+  | Node 2  | cpu2 | 192.168.5.62 |
+  | Node 3  | GUI  | 192.168.5.63 |
+    
+    **Node 1**
+    ```console
+    service mysql stop
+    nano /etc/mysql/my.cnf
+    ```
+    ```console
+   [mysqld]
+   binlog_expire_logs_seconds=604800 \# 7 ngày hết hạn logs
+   wsrep_provider=/usr/lib/galera4/libgalera_smm.so
+   wsrep_cluster_name=VNPT
+   wsrep_cluster_address=gcomm://
+   wsrep_node_name=VNPT-Cluster
+   wsrep_node_address=192.168.5.61
+   wsrep_sst_method=xtrabackup-v2
+   pxc_strict_mode=ENFORCING \# import file vào DB thì để tham số DISABLED
+   binlog_format=ROW
+   default_storage_engine=InnoDB
+   innodb_autoinc_lock_mode=2
+   pxc-encrypt-cluster-traffic=OFF \# Tắt mã hóa SSL
+    ```
+    **Node 2**
+    ```console
+    service mysql stop
+    nano /etc/mysql/my.cnf
+    ```
+  ```console
+  [mysqld]
+  binlog_expire_logs_seconds=604800 \# 7 ngày hết hạn logs
+  wsrep_provider=/usr/lib/galera4/libgalera_smm.so
+  wsrep_cluster_name=VNPT
+  wsrep_cluster_address=gcomm://192.168.5.61,192.168.5.62
+  wsrep_node_name=VNPT-Cluster
+  wsrep_node_address=192.168.5.62
+  wsrep_sst_method=xtrabackup-v2
+  pxc_strict_mode=ENFORCING \# import file vào DB thì để tham số DISABLED
+  binlog_format=ROW
+  default_storage_engine=InnoDB
+  innodb_autoinc_lock_mode=2
+  pxc-encrypt-cluster-traffic=OFF \# Tắt mã hóa SSL
+  ```
+- Bước 3: Khởi động node đầu tiên (Node 1)
+    ```console
+    systemctl start mysql@bootstrap.service
+    ```
+    Tạo user để đồng bộ dữ liệu giữa các node
+    ```console
+    mysql -u root -p
+    show status like 'wsrep%';
+    CREATE USER 'emas'@'%' IDENTIFIED BY 'abCD@1234';
+    GRANT ALL PRIVILEGES ON *.* To 'emas'@'%';
+    GRANT GRANT OPTION ON *.* To 'emas'@'%';
+    FLUSH PRIVILEGES;
+    SELECT * from information_schema.user_privileges where grantee like "'emas'%";
+    ```
+    Sửa lại file config
+  ```console
+  nano /etc/mysql/my.cnf
+  wsrep_cluster_address=gcomm://192.168.5.61,192.168.5.62
+  ```
+- Bước 4: Thêm node vào cụm (Node 2)
+  ```console
+  systemctl start mysql
+  mysql -u root -p
+  show status like "%wsrep%";
+  select user,host from mysql.user;
+  ```
+- Bước 5: Thiết lập DB Management - **Galera Arbitrator** (Node 3)
+    
+    Cài đặt Galera Arbitrator từ kho lưu trữ
+  ```console
+  apt install -y wget gnupg2 lsb-release curl
+  wget https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+  dpkg -i percona-release_latest.generic_all.deb
+  apt update
+  percona-release setup pxc80
+  apt install percona-xtradb-cluster-garbd
+  ```
+    Cấu hình Galera Arbitrator
+  ```console
+  nano /etc/default/garb
+  ```
+    ```console
+    # Copyright (C) 2012 Codership Oy
+    # This config file is to be sourced by garb service script.
+    # A comma-separated list of node addresses (address\[:port\]) in the cluster
+    GALERA_NODES="192.168.5.61:4567, 192.168.5.62:4567, 192.168.5.63:4567"
+    # Galera cluster name, should be the same as on the rest of the nodes.
+    GALERA_GROUP="VNPT"
+    # Optional Galera internal options string (e.g. SSL settings)
+    # see http://galeracluster.com/documentation-webpages/galeraparameters.html
+    # GALERA_OPTIONS=""
+    # Log file for garbd. Optional, by default logs to syslog
+    # Deprecated for CentOS7, use journalctl to query the log for garbd
+    LOG_FILE="/var/log/garb.log"
+    ```
+    Tạo đường dẫn log, phân quyền và khởi động Galera Arbitrator
+  ```console
+  touch /var/log/garb.log
+  chmod a+rw /var/log/garb.log
+  systemctl start garbd
+  service garbd status
+  ```
+### 2.4 Cài đặt EFK Stack (Elasticsearch -- Fluentd -- Kibana) 
 
 ### Elasticsearch (trên node 1, 2, 3 tương tự)
 
