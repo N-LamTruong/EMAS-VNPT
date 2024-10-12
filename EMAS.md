@@ -48,7 +48,7 @@
 ## 2. HƯỚNG DẪN CÀI ĐẶT DỊCH VỤ 3RD PARTY
 
 ### 2.1 Cài đặt Nginx
-
+![nginx](/Picture/nginx.png)
 - Bước 1: Cài đặt web server Nginx
     ```console
     apt install nginx -y
@@ -58,7 +58,7 @@
     systemctl start nginx && systemctl enable nginx
     ```
 ### 2.2 Cài đặt Keepalived
-
+![keepalived](/Picture/keepalived.png)
 - Bước 1: Cài đặt service Keepalived và cấu hình cho phép gắn địa chỉ IP ảo lên card mạng và IP Forward
     ```console
     apt-get -y install keepalivede
@@ -339,92 +339,71 @@ Percona XtraDB Cluster là một giải pháp mã nguồn mở hoàn toàn và c
   systemctl start garbd
   service garbd status
   ```
-### 2.4 Cài đặt EFK Stack (Elasticsearch -- Fluentd -- Kibana) 
+### 2.4 Cài đặt EFK Stack (Elasticsearch -- Fluentd -- Kibana)
 
-### Elasticsearch (trên node 1, 2, 3 tương tự)
+**Elasticsearch (trên node 1, 2, 3 tương tự)**
 
--   Bước 1: Lấy key và repo version Elasticsearch 7.x.x
+![elasticsearch](/Picture/elasticsearch.jpg)
+- Bước 1: Lấy key và repo version Elasticsearch 7.x.x
+  ```console
+  wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
+  apt-get install apt-transport-https
+  echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/7.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-7.x.list
+  ```
 
- *wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch \| sudo
- gpg \--dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg*
+- Bước 2: Cài đặt và cấu hình Elasticsearch
+  ```console 
+  apt-get update && apt-get install elasticsearch
+  nano /etc/elasticsearch/elasticsearch.yml
+  ```
+  ```console
+  cluster.name: VNPT
+  node.name: node-1
+  network.host: 192.168.5.61
+  http.port: 9200
+  discovery.seed_hosts: ["192.168.5.61", "192.168.5.62", "192.168.5.63"] 
+  cluster.initial_master_nodes: ["node-1","node-2","node-3"]
+  ```
+  ```console
+  nano /etc/elasticsearch/jvm.options
+  ```
+  ```console
+  -Xms2g
+  -Xmx2g
+  ```
+- Bước 3: Khởi động Elasticsearch
+  ```console
+  systemctl daemon-reload && systemctl enable elasticsearch.service
+  systemctl start elasticsearch.service
+  ```
+**Kibana (trên node 1, 2, 3 tương tự)**
 
- *apt-get install apt-transport-https*
+![Kibana](/Picture/kibana.png)
+- Bước 1: Cài đặt Kibana và cấu hình Kibana
 
- *echo \"deb
- \[signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg\]
- https://artifacts.elastic.co/packages/7.x/apt stable main\" \| sudo
- tee /etc/apt/sources.list.d/elastic-7.x.list*
+  ```console
+  apt-get install kibana
+  nano /etc/kibana/kibana.yml
+  ```
+  ```console 
+  server.port: 5601
+  server.host: "192.168.xxx.xxx"
+  server.publicBaseUrl: "http://192.168.5.61:5601"
+  elasticsearch.hosts: ["http://192.168.5.61:9200", "http://192.168.5.62:9200", "http://192.168.5.63:9200"]
+  ```
+- Bước 2: Khởi động Kibana
+  ```console
+  systemctl enable kibana.service && systemctl start kibana.service*
+  ```
+**Fluentd (trên node 1, 2, 3 tương tự)**
 
--   Bước 2: Cài đặt và cấu hình Elasticsearch
-
- \+ Cài đặt Elasticsearch
-
- *apt-get update && apt-get install elasticsearch*
-
- \+ Cấu hình Elasticsearch
-
- *nano /etc/elasticsearch/elasticsearch.yml*
-
- cluster.name: VNPT
-
- node.name: node-1
-
- network.host: 192.168.5.61
-
- http.port: 9200
-
- discovery.seed_hosts: \[\"192.168.5.61\", \"192.168.5.62\",
- \"192.168.5.63\"\] cluster.initial_master_nodes: \[\"node-1\",
- \"node-2\", \"node-3\"\]
-
- *nano /etc/elasticsearch/jvm.options*
-
- -Xms2g
-
- -Xmx2g
-
- \+ Khởi động Elasticsearch
-
- *systemctl daemon-reload && systemctl enable elasticsearch.service*
-
- *systemctl start elasticsearch.service*
-
-### Kibana (trên node 1, 2, 3 tương tự)
-
--   Bước 1: Cài đặt Kibana
-
- *apt-get install kibana*
-
--   Bước 2: Cấu hình Kibana
-
- *nano /etc/kibana/kibana.yml*
-
- server.port: 5601
-
- server.host: \"192.168.xxx.xxx\"
-
- server.publicBaseUrl: \"http://192.168.5.61:5601\"
-
- elasticsearch.hosts: \[\"http://192.168.5.61:9200\",
- \"http://192.168.5.62:9200\", \"http://192.168.5.63:9200\"\]
-
--   Bước 3: Khởi động Kibana
-
- *systemctl enable kibana.service && systemctl start kibana.service*
-
-### Fluentd (trên node 1, 2, 3 tương tự)
-
--   Bước 1: Cài đặt từ repo Fluentd
-
- *curl -fsSL
- https://toolbelt.treasuredata.com/sh/install-ubuntu-bionic-td-agent3.sh
- \| sh*
-
--   Bước 2: Cài đặt Plugin Fluentd to Elasticsearch
-
- *td-agent-gem install fluent-plugin-elasticsearch*
-
--   Bước 3: Cấu hình Fluentd (đọc log nginx)
+![fluentd](/Picture/fluentd.png)
+- Bước 1: Cài đặt từ repo Fluentd và Plugin Fluentd to Elasticsearch
+```console
+curl -fsSL https://toolbelt.treasuredata.com/sh/install-ubuntu-bionic-td-agent3.sh | sh
+td-agent-gem install fluent-plugin-elasticsearch
+```
+- Bước 2: Cấu hình Fluentd (đọc log nginx)
 
  \+ Tạo file cấu hình mới
 
