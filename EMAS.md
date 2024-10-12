@@ -399,91 +399,59 @@ Percona XtraDB Cluster là một giải pháp mã nguồn mở hoàn toàn và c
 
 ![fluentd](/Picture/fluentd.png)
 - Bước 1: Cài đặt từ repo Fluentd và Plugin Fluentd to Elasticsearch
-```console
-curl -fsSL https://toolbelt.treasuredata.com/sh/install-ubuntu-bionic-td-agent3.sh | sh
-td-agent-gem install fluent-plugin-elasticsearch
-```
+  ```console
+  curl -fsSL https://toolbelt.treasuredata.com/sh/install-ubuntu-bionic-td-agent3.sh | sh
+  td-agent-gem install fluent-plugin-elasticsearch
+  ```
 - Bước 2: Cấu hình Fluentd (đọc log nginx)
 
- \+ Tạo file cấu hình mới
-
- *mv /etc/td-agent/td-agent.conf /etc/td-agent/td-agent.conf.old*
-
- *nano /etc/td-agent/td-agent.conf*
-
-> \<match \*\*.\*\>
->
-> \@type copy
->
-> \<store\>
->
-> \@type elasticsearch
->
-> host 192.168.5.61
->
-> port 9200
->
-> index_name \${tag}
->
-> type_name \${tag}
->
-> enable_ilm true
->
-> include_timestamp true
->
-> flush_interval 5s
->
-> \</store\>
->
-> \<store\>
->
-> \@type stdout
->
-> \</store\>
->
-> \</match\>
->
-> \<source\>
->
-> \@type forward
->
-> port 24224
->
-> bind 0.0.0.0
->
-> \</source\>
->
-> \<source\>
->
-> \@type tail
->
-> path /var/log/nginx/access.log
->
-> \# pos_file /var/log/docker-nginx.pos
->
-> tag GPU1.access-nginx
->
-> \<parse\>
->
-> \@type nginx
->
-> localtime true
->
-> time_type string
->
-> unmatched_lines
->
-> \</parse\>
->
-> \</source\>
-
--   Bước 4: Phân quyền và khởi động Fluentd
-
- *chmod og+r -R /var/log/nginx/*
-
- *systemctl enable td-agent && systemctl restart td-agent*
-
-## Cài đặt Redis
+    Tạo file cấu hình mới
+  ```console
+  mv /etc/td-agent/td-agent.conf /etc/td-agent/td-agent.conf.old
+  nano /etc/td-agent/td-agent.conf
+  ```
+  ```console
+  <match **.*>
+    @type copy
+    <store>
+        @type elasticsearch
+        host 192.168.5.61
+        port 9200
+        index_name ${tag}
+        type_name ${tag}
+        enable_ilm true
+        include_timestamp true
+        flush_interval 5s
+    </store>
+    <store>
+        @type stdout
+    </store>
+    </match>
+    
+    <source>
+        @type forward
+        port 24224
+        bind 0.0.0.0
+    </source>
+    <source>
+        @type tail
+        path /var/log/nginx/access.log
+        # pos_file /var/log/docker-nginx.pos
+        tag GPU1.access-nginx
+        <parse>
+            @type nginx
+            localtime true
+            time_type string
+            unmatched_lines
+        </parse>
+    </source>
+  ```
+- Bước 3: Phân quyền và khởi động Fluentd
+  ```console
+  chmod og+r -R /var/log/nginx/
+  systemctl enable td-agent && systemctl restart td-agent
+  ```
+### 2.5 Cài đặt Redis
 
 ### Redis-server
 
