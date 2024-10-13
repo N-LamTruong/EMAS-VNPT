@@ -527,106 +527,77 @@ Percona XtraDB Cluster là một giải pháp mã nguồn mở hoàn toàn và c
   systemctl daemon-reload && systemctl enable redis-sentinel
   service redis-sentinel start
   ```
+  ![redis-sentinel](/Picture/Redis-sentinel.png)
 
-## Cài đặt RabbitMQ
+### 2.6 Cài đặt RabbitMQ
+![rabbitmq](/Picture/rabbitmq.png)
 
--   Bước 1: Add IP của toàn bộ node trong cụm vào mỗi node để đảm bảo
-    các node có thể nhìn thấy nhau
+- Bước 1: Add IP của toàn bộ node trong cụm vào mỗi node để đảm bảo các node có thể nhìn thấy nhau
+  ```console
+  nano /etc/hosts
+  ```
+  ```console
+  192.168.5.61 cluster
+  192.168.5.62 node2
+  192.168.5.63 node3
+  ```
+- Bước 2: Cài đặt Erlang. RabbitMQ yêu cầu Erlang để hoạt động
+  ```console
+  apt update && sudo apt install curl software-properties-common apt-transport-https lsb-release -y
+  curl -fsSL https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/erlang.gpg
+  echo "deb https://packages.erlang-solutions.com/ubuntu $(lsb_release -cs) contrib" | sudo tee /etc/apt/sources.list.d/erlang.list
+  apt update && sudo apt install erlang -y
+  ```
+- Bước 3: Cài đặt RabbitMQ và bật Plugin giao diện quản lý của RabbitMQ
+  ```console
+  curl -s https://packagecloud.io/install/repositories/rabbitmq/rabbitmq-server/script.deb.sh | sudo bash
+  apt update && apt install rabbitmq-server -y
+  systemctl status rabbitmq-server.service
+  systemctl enable rabbitmq-server.service
+  rabbitmq-plugins enable rabbitmq_management
+  systemctl restart rabbitmq-server # Restart lại dịch vụ xem có bị lỗi không
+  sudo ss -tunelp | grep 15672 # Dịch vụ Web sẽ được lắng nghe trên port TCP 15672, nếu tường lửa đang hoạt động, hãy mở cả hai port 5672 và 15672
+  ```
+  ![redis-plugin](/Picture/redis-plugin.png)
 
- *nano /etc/hosts*
+- Bước 4: Copy cookie từ cluster vào các nodes còn lại
+  ```console
+  scp /var/lib/rabbitmq/.erlang.cookie root@node2:/var/lib/rabbitmq/
+  scp /var/lib/rabbitmq/.erlang.cookie root@node3:/var/lib/rabbitmq/
+  ```
+- Bước 5: Cấu hình RabbitMQ tham gia vào cụm (Node 2, 3)
+  ```console
+  systemctl restart rabbitmq-server
+  sudo rabbitmqctl stop_app
+  sudo rabbitmqctl reset
+  sudo rabbitmqctl join_cluster rabbit@cluster
+  sudo rabbitmqctl start_app
+  sudo rabbitmqctl cluster_status
+  ```
+  ![redis-cluster-status](/Picture/redis-cluster-status.png)
 
- 192.168.5.61 cluster
+- Bước 6: Xóa vhost và user default, tạo vhost /emas và user quản trị viên truy cập từ xa quản lý cụm RabbitMQ
+  ```console
+  rabbitmqctl delete_vhost /
+  rabbitmqctl delete_user guest
+  rabbitmqctl add_vhost /emas
+  rabbitmqctl set_policy --vhost /emas ha-all ".*"'{"ha-mode":"all"}'*
+  rabbitmqctl list_policies --vhost /emas
+  rabbitmqctl add_user emas 123
+  rabbitmqctl set_user_tags emas administrator
+  rabbitmqctl set_permissions -p /emas emas ".*" ".*" ".*"
+  ```
+- Bước 7: Truy cập web management để quản trị tất cả các nodes trong cụm RabbitMQ
+  
+  Các bạn có thể sử dụng bất cứ trình duyệt web nào để truy cập IP RabbitMQ
+  
+  192.168.5.61:15672
+  
+  User: emas
+  
+  Password: 123
 
- 192.168.5.62 node2
-
- 192.168.5.63 node3
-
--   Bước 2: Cài đặt Erlang. RabbitMQ yêu cầu Erlang để hoạt động
-
- *apt update && sudo apt install curl software-properties-common
- apt-transport-https lsb-release -y*
-
- *curl -fsSL
- https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc \|
- gpg \--dearmor -o /etc/apt/trusted.gpg.d/erlang.gpg*
-
- *echo \"deb https://packages.erlang-solutions.com/ubuntu
- \$(lsb_release -cs) contrib\" \| sudo tee
- /etc/apt/sources.list.d/erlang.list*
-
- *apt update && sudo apt install erlang -y*
-
--   Bước 3: Cài đặt Cài đặt RabbitMQ
-
- *curl -s
- https://packagecloud.io/install/repositories/rabbitmq/rabbitmq-server/script.deb.sh
- \| sudo bash*
-
- *apt update && apt install rabbitmq-server -y*
-
- *systemctl status rabbitmq-server.service*
-
- *systemctl enable rabbitmq-server.service*
-
--   Bước 4: Bật Plugin giao diện quản lý của RabbitMQ
-
- *rabbitmq-plugins enable rabbitmq_management*
-
- *systemctl restart rabbitmq-server* \# Restart lại dịch vụ xem có bị
- lỗi không
-
- *sudo ss -tunelp \| grep 15672* \# Dịch vụ Web sẽ được lắng nghe trên
- port TCP 15672, nếu tường lửa đang hoạt động, hãy mở cả hai port 5672
- và 15672
-
--   Bước 5: Copy cookie từ cluster vào các nodes còn lại
-
- *scp /var/lib/rabbitmq/.erlang.cookie root@node2:/var/lib/rabbitmq/*
-
- *scp /var/lib/rabbitmq/.erlang.cookie root@node3:/var/lib/rabbitmq/*
-
--   Bước 6: Cấu hình RabbitMQ tham gia vào cụm (Node 2, 3)
-
- *systemctl restart rabbitmq-server*
-
- *sudo rabbitmqctl stop_app*
-
- *sudo rabbitmqctl reset*
-
- *sudo rabbitmqctl join_cluster rabbit@cluster*
-
- *sudo rabbitmqctl start_app*
-
- *sudo rabbitmqctl cluster_status*
-
--   Bước 7: Xóa vhost và user default, tạo vhost /emas và user quản trị
-    viên truy cập từ xa quản lý cụm RabbitMQ
-
- *rabbitmqctl delete_vhost /*
-
- *rabbitmqctl delete_user guest*
-
- *rabbitmqctl add_vhost /emas*
-
- *rabbitmqctl set_policy \--vhost /emas ha-all \".\*\"
- \'{\"ha-mode\":\"all\"}\'*
-
- *rabbitmqctl list_policies \--vhost /emas*
-
- *rabbitmqctl add_user emas 123*
-
- *rabbitmqctl set_user_tags emas administrator*
-
- *rabbitmqctl set_permissions -p /emas emas \".\*\" \".\*\" \".\*\"*
-
--   Bước 8: Truy cập web management để quản trị tất cả các nodes trong
-    cụm RabbitMQ
-
- *192.168.5.61:15672*
-
- #User: emas
-
- #Password: 123
+  ![redis-website](/Picture/Redis-website.png)
 
 ## Cài đặt Minio
 
