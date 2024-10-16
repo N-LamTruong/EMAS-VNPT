@@ -597,162 +597,116 @@ Percona XtraDB Cluster là một giải pháp mã nguồn mở hoàn toàn và c
   
   Password: 123
 
-  ![redis-website](/Picture/Redis-website.png)
+  ![-website](/Picture/Redis-website.png)
+
+### 2.7 Cài đặt Minio
+![minio](/Picture/minio.png)
+
+- Bước 1: Thêm **tên server vào file hosts** và tải minio từ [**https://dl.min.io/**](https://dl.min.io/)
+  ```console
+  wget https://dl.min.io/server/minio/release/linux-amd64/archive/minio.RELEASE.2022-04-26T01-20-24Z
+  mv minio.RELEASE.2022-04-26T01-20-24Z minio*
+  ```
+- Bước 2: Set quyền execute và đưa file vào thư mục bin. Tạo user và gán quyền cho minio
+  ```console
+  chmod +x minio
+  cp minio /usr/local/bin
+  useradd -r minio-user -s /sbin/nologin
+  chown minio-user:minio-user /usr/local/bin/minio
+  ```
+- Bước 3: Tạo và gán quyền cho các đường dẫn cấu hình
+  ```console
+  mkdir /usr/local/share/minio
+  chown minio-user:minio-user /usr/local/share/minio
+  mkdir /etc/minio
+  chown minio-user:minio-user /etc/minio
+  ```
+- Bước 4: LVM
+  ```console
+  pvcreate /dev/sdb
+  vgcreate minio /dev/sdb
+  lvcreate -n data_minio -l 100%FREE minio
+  mkfs.ext4 /dev/minio/data_minio
+  mkdir /data && mount /dev/minio/data_minio /data/
+  blkid /dev/minio/data_minio
+  /dev/minio/data_minio: UUID="..." TYPE="ext4"
+  nano /etc/fstab
+  UUID=... /data ext4 defaults 0 0
+  mount -a
+  mount | grep data
+  /dev/mapper/minio-data_minio on /data type ext4 (rw,relatime)
+  ```
+- Bước 5: Tạo folder và gán quyền chứa dữ liệu minio trong dự án emas làm 2 vùng
+  ```console
+  mkdir -p /data/minio1
+  mkdir -p /data/minio2
+  chown -R minio-user:minio-user /data/
+  ```
+- Bước 6: Tạo file cấu hình /etc/default/minio
+  ```console
+  nano /etc/default/minio
+  MINIO_ACCESS_KEY="emas"
+  MINIO_VOLUMES="http://192.168.5.61/data/minio1
+  http://192.168.5.61/data/minio2 http://192.168.5.62/data/minio1
+  http://192.168.5.62/data/minio2 http://192.168.5.63/data/minio1
+  http://192.168.5.63/data/minio2 http://192.168.5.64/data/minio1
+  http://192.168.5.64/data/minio2 http://192.168.5.65/data/minio1
+  http://192.168.5.65/data/minio2"
+  MINIO_OPTS="-C /etc/minio --address :9000 --console-address :9001"
+  MINIO_SECRET_KEY="abCD@1234"
+  ```
+- Bước 7: Tạo file cấu hình /etc/systemd/system/minio.service
+    ```console
+    nano /etc/systemd/system/minio.service
+    Description=MinIO
+    Documentation=https://docs.min.io
+    Wants=network-online.target
+    After=network-online.target
+    AssertFileIsExecutable=/usr/local/bin/minio
+    [Service]
+    WorkingDirectory=/usr/local/
+    User=minio-user
+    Group=minio-user
+    ProtectProc=invisible
+    EnvironmentFile=/etc/default/minio
+    ExecStartPre=/bin/bash -c "if [ -z \"${MINIO_VOLUMES}\"]; then echo \"Variable MINIO_VOLUMES not set in /etc/default/minio\"; exit 1; fi"
+    ExecStart=/usr/local/bin/minio server $MINIO_OPTS $MINIO_VOLUMES
+
+    # Let systemd restart this service always
+    Restart=always
+
+    # Specifies the maximum file descriptor number that can be opened by this process
+    LimitNOFILE=1048576
+
+    # Specifies the maximum number of threads this process can create
+    TasksMax=infinity
+
+    # Disable timeout logic and wait until process is stopped
+    TimeoutStopSec=infinity
+    SendSIGKILL=no
+
+    [Install]
+    WantedBy=multi-user.target
+
+    # Built for ${project.name}-${project.version} (${project.name})
+    ```
+- Bước 8: Reload lại deamon và khởi động service minio
+  ```console
+  systemctl daemon-reload
+  systemctl enable minio
+  systemctl start minio
+  systemctl status minio
+  ```
+- Bước 9: Truy cập trang quản trị Minio trên web browser
 
-## Cài đặt Minio
+  192.168.5.61:9200
 
--   Bước 1: Thêm tên server vào file hosts và tải minio từ
-    [**https://dl.min.io/**](https://dl.min.io/)
+  User: emas
 
- *wget
- <https://dl.min.io/server/minio/release/linux-amd64/archive/minio.RELEASE.2022-04-26T01-20-24Z>*
+  Password: abCD@1234
+  
+  ![minio-login](/Picture/minio-login.png)
 
- *mv minio.RELEASE.2022-04-26T01-20-24Z minio*
-
--   Bước 2: Set quyền execute và đưa file vào thư mục bin. Tạo user và
-    gán quyền cho minio
-
- *chmod +x minio*
-
- *cp minio /usr/local/bin*
-
- *useradd -r minio-user -s /sbin/nologin*
-
- *chown minio-user:minio-user /usr/local/bin/minio*
-
--   Bước 3: Tạo và gán quyền cho các đường dẫn cấu hình
-
- *mkdir /usr/local/share/minio*
-
- *chown minio-user:minio-user /usr/local/share/minio*
-
- *mkdir /etc/minio*
-
- *chown minio-user:minio-user /etc/minio*
-
--   Bước 4: LVM
-
- *pvcreate /dev/sdb*
-
- *vgcreate minio /dev/sdb*
-
- *lvcreate -n data_minio -l 100%FREE minio*
-
- *mkfs.ext4 /dev/minio/data_minio*
-
- *mkdir /data && mount /dev/minio/data_minio /data/*
-
- *blkid /dev/minio/data_minio*
-
- /dev/minio/data_minio: UUID=\"\...\" TYPE=\"ext4\"
-
- *nano /etc/fstab*
-
- UUID=\... /data ext4 defaults 0 0
-
- *mount -a*
-
- *mount \| grep data*
-
- /dev/mapper/minio-data_minio on /data type ext4 (rw,relatime)
-
--   Bước 5: Tạo folder và gán quyền chứa dữ liệu minio trong dự án emas
-    là 2 vùng
-
- *mkdir -p /data/minio1*
-
- *mkdir -p /data/minio2*
-
- *chown -R minio-user:minio-user /data/*
-
--   Bước 6: Tạo file /etc/default/minio
-
- *nano /etc/default/minio*
-
- MINIO_ACCESS_KEY=\"emas\"
-
- MINIO_VOLUMES=\"http://192.168.5.61/data/minio1
- http://192.168.5.61/data/minio2 http://192.168.5.62/data/minio1
- http://192.168.5.62/data/minio2 http://192.168.5.63/data/minio1
- http://192.168.5.63/data/minio2 http://192.168.5.64/data/minio1
- http://192.168.5.64/data/minio2 http://192.168.5.65/data/minio1
- http://192.168.5.65/data/minio2\"
-
- MINIO_OPTS=\"-C /etc/minio \--address :9000 \--console-address :9001\"
-
- MINIO_SECRET_KEY=\"abCD@1234\"
-
--   Bước 7: Tạo file /etc/systemd/system/minio.service
-
- *nano /etc/systemd/system/minio.service*
-
- Description=MinIO
-
- Documentation=https://docs.min.io
-
- Wants=network-online.target
-
- After=network-online.target
-
- AssertFileIsExecutable=/usr/local/bin/minio
-
- \[Service\]
-
- WorkingDirectory=/usr/local/
-
- User=minio-user
-
- Group=minio-user
-
- ProtectProc=invisible
-
- EnvironmentFile=/etc/default/minio
-
- ExecStartPre=/bin/bash -c \"if \[ -z \\\"\${MINIO_VOLUMES}\\\" \];
- then echo \\\"Variable MINIO_VOLUMES not set in
- /etc/default/minio\\\"; exit 1; fi\"
-
- ExecStart=/usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
-
- \# Let systemd restart this service always
-
- Restart=always
-
- \# Specifies the maximum file descriptor number that can be opened by
- this process
-
- LimitNOFILE=1048576
-
- \# Specifies the maximum number of threads this process can create
-
- TasksMax=infinity
-
- \# Disable timeout logic and wait until process is stopped
-
- TimeoutStopSec=infinity
-
- SendSIGKILL=no
-
- \[Install\]
-
- WantedBy=multi-user.target
-
- \# Built for \${project.name}-\${project.version} (\${project.name})
-
--   Bước 8: Reload lại deamon và khởi động service minio
-
- *systemctl daemon-reload*
-
- *systemctl enable minio*
-
- *systemctl start minio*
-
- *systemctl status minio*
-
--   Bước 9: Truy cập trang quản trị Minio trên web browser
-
- *192.168.5.61:9200*
-
- #User: emas
-
- #Password: abCD@1234
+## Lưu ý:
+- Hiện tại chưa bổ sung chi tiết verison chính xác cho từng serice do thời gian chuẩn bị tài liệu gấp rút
+- Trong thời gian tới sẽ update version kết hợp các serice lại áp dụng cho dự án lớn
